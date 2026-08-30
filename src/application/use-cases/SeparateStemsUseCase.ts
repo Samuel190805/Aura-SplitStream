@@ -1,5 +1,6 @@
 import path from "path";
 import fs from "fs/promises";
+import fsSync from "fs";
 import crypto from "crypto";
 import { IJobRepository } from "@/domain/repositories/IJobRepository";
 import { IAssetRepository } from "@/domain/repositories/IAssetRepository";
@@ -71,8 +72,8 @@ export class SeparateStemsUseCase {
           outputDirectory: workDir,
           targetFormat: "wav",
           onProgress: (_stage, pct, msg) => {
-            this.publishProgress(jobId, "ANALYSIS", Math.min(25, 10 + (pct * 0.15)), msg);
-          }
+            this.publishProgress(jobId, "ANALYSIS", Math.min(25, 10 + pct * 0.15), msg);
+          },
         });
         workingAudioPath = downloaded.filePath;
       }
@@ -90,7 +91,7 @@ export class SeparateStemsUseCase {
         workingAudioPath = extractedAudio;
       }
 
-      // 2. MODEL INFERENCE STAGE
+      // 2. MODEL INFERENCE STAGE (Demucs v4 / Ensemble)
       const inferenceMsg = ensemble
         ? "Running Multi-Model Ensemble Separation (Demucs + Spectral Blending)..."
         : mode === "6-stem"
@@ -117,13 +118,38 @@ export class SeparateStemsUseCase {
       );
 
       // 3. STEM RECONSTRUCTION & CHECKSUM INTEGRITY VALIDATION STAGE
-      this.publishProgress(jobId, "STEM_RECONSTRUCTION", 75, "Reconstructing stems and verifying audio separation checksums...");
-      await this.jobRepo.updateProgress(jobId, "STEM_RECONSTRUCTION", 75, "Validating stem uniqueness...");
+      this.publishProgress(
+        jobId,
+        "STEM_RECONSTRUCTION",
+        75,
+        "Reconstructing stems and generating derived 3-stem instruments mix..."
+      );
+      await this.jobRepo.updateProgress(
+        jobId,
+        "STEM_RECONSTRUCTION",
+        75,
+        "Validating stem uniqueness..."
+      );
+
+      // Generate derived "Instruments" combined stem (Drums + Other + Piano + Guitar, excluding Vocals & Bass)
+      const instrumentSources: string[] = [];
+      if (rawStems.drumsPath) instrumentSources.push(rawStems.drumsPath);
+      if (rawStems.otherPath) instrumentSources.push(rawStems.otherPath);
+      if (rawStems.pianoPath) instrumentSources.push(rawStems.pianoPath);
+      if (rawStems.guitarPath) instrumentSources.push(rawStems.guitarPath);
+
+      const rawInstrumentsPath = path.join(stemsOutputDir, "instruments.wav");
+      if (instrumentSources.length > 0) {
+        await this.transcoder.mixAudioTracks(instrumentSources, rawInstrumentsPath);
+      }
 
       const stemFiles: Array<{ key: string; path: string; name: string; kind: MediaAssetKind }> = [
         { key: "vocals", path: rawStems.vocalsPath, name: "Vocals", kind: "STEM_VOCALS" },
-        { key: "drums", path: rawStems.drumsPath, name: "Drums", kind: "STEM_DRUMS" },
+        ...(fsSync.existsSync(rawInstrumentsPath)
+          ? [{ key: "instruments", path: rawInstrumentsPath, name: "Instruments", kind: "STEM_INSTRUMENTS" as const }]
+          : []),
         { key: "bass", path: rawStems.bassPath, name: "Bass", kind: "STEM_BASS" },
+        { key: "drums", path: rawStems.drumsPath, name: "Drums", kind: "STEM_DRUMS" },
         { key: "other", path: rawStems.otherPath, name: "Other (Instruments)", kind: "STEM_OTHER" },
       ];
 
@@ -181,7 +207,7 @@ export class SeparateStemsUseCase {
       this.publishProgress(jobId, "EXPORT", 85, "Transcoding & validating stem audio integrity...");
       await this.jobRepo.updateProgress(jobId, "EXPORT", 85, "Validating audio codecs...");
 
-      // Store in managed storage directory (Storage Discipline: Part 4.4)
+      // Store in managed storage directory (Storage Discipline)
       const finalStemsDir = path.join(process.cwd(), "storage", "jobs", jobId);
       await fs.mkdir(finalStemsDir, { recursive: true });
 
@@ -252,10 +278,15 @@ export class SeparateStemsUseCase {
         createdAssets.push(asset);
 
         const expProgress = 85 + Math.floor(((i + 1) / stemFiles.length) * 14);
-        this.publishProgress(jobId, "EXPORT", expProgress, `Validated ${item.name} (${Math.round(confidence * 100)}% clarity)...`);
+        this.publishProgress(
+          jobId,
+          "EXPORT",
+          expProgress,
+          `Validated ${item.name} (${Math.round(confidence * 100)}% clarity)...`
+        );
       }
 
-      // Storage discipline: Immediately remove intermediate per-model & raw files in tmp/jobs/<jobId>
+      // Storage discipline: clean intermediate temporary job directory
       await retentionManager.cleanJobIntermediates(jobId);
 
       // Mark Job Completed
@@ -279,7 +310,6 @@ export class SeparateStemsUseCase {
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Stem separation failed";
       console.error(`[SeparateStemsUseCase] Error on job ${jobId}:`, err);
-      // Clean up tmp on failure as well
       await retentionManager.cleanJobIntermediates(jobId);
 
       await this.jobRepo.updateStatus(jobId, "FAILED", "FAILED", errorMsg, errorMsg);

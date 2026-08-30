@@ -1,6 +1,5 @@
 import fs from "fs";
 import path from "path";
-import ffmpeg from "fluent-ffmpeg";
 import {
   SeparationProviderPort,
   SeparationResult,
@@ -8,38 +7,33 @@ import {
   SeparationOptions,
 } from "@/application/ports/SeparationProviderPort";
 
+let ffmpegInstance: any = null;
+
+function getFfmpeg(): any {
+  if (!ffmpegInstance) {
+    try {
+      ffmpegInstance = require("fluent-ffmpeg");
+      const ffmpegStatic = require("ffmpeg-static");
+      if (ffmpegStatic && fs.existsSync(ffmpegStatic)) {
+        ffmpegInstance.setFfmpegPath(ffmpegStatic);
+      }
+      const ffprobeStatic = require("ffprobe-static");
+      if (ffprobeStatic && ffprobeStatic.path && fs.existsSync(ffprobeStatic.path)) {
+        ffmpegInstance.setFfprobePath(ffprobeStatic.path);
+      }
+    } catch {
+      // fallback
+    }
+  }
+  return ffmpegInstance;
+}
+
 export class SeparationClient implements SeparationProviderPort {
   private serviceUrl: string;
-  private ffmpegPathInitialized = false;
 
   constructor() {
     this.serviceUrl = process.env.SEPARATION_SERVICE_URL || "http://localhost:8000";
-    this.initFfmpegPaths();
-  }
-
-  private initFfmpegPaths() {
-    if (this.ffmpegPathInitialized) return;
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const ffmpegStatic = require("ffmpeg-static");
-      if (ffmpegStatic && fs.existsSync(ffmpegStatic)) {
-        ffmpeg.setFfmpegPath(ffmpegStatic);
-      }
-    } catch {
-      // fallback to system PATH
-    }
-
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const ffprobeStatic = require("ffprobe-static");
-      if (ffprobeStatic && ffprobeStatic.path && fs.existsSync(ffprobeStatic.path)) {
-        ffmpeg.setFfprobePath(ffprobeStatic.path);
-      }
-    } catch {
-      // fallback to system PATH
-    }
-
-    this.ffmpegPathInitialized = true;
+    getFfmpeg();
   }
 
   async isServiceAvailable(): Promise<boolean> {
@@ -61,7 +55,7 @@ export class SeparationClient implements SeparationProviderPort {
     options?: SeparationOptions
   ): Promise<SeparationResult> {
     await fs.promises.mkdir(outputDirectory, { recursive: true });
-    this.initFfmpegPaths();
+    getFfmpeg();
 
     const is6Stem = options?.mode === "6-stem";
     const isEnsemble = Boolean(options?.ensemble);
@@ -159,7 +153,7 @@ export class SeparationClient implements SeparationProviderPort {
       filterString += `${inputsTags}amix=inputs=${mixInputs.length}:duration=first:normalize=0,volume=1.0[outa]`;
 
       await new Promise<void>((res, rej) => {
-        let cmd = ffmpeg();
+        let cmd = getFfmpeg()();
         mixInputs.forEach((p) => {
           cmd = cmd.input(p);
         });
@@ -244,7 +238,7 @@ export class SeparationClient implements SeparationProviderPort {
 
     // 1. Vocals: Center channel extraction + vocal formant bandpass filter (200Hz - 3.8kHz)
     await new Promise<void>((res, rej) => {
-      ffmpeg(audioFilePath)
+      getFfmpeg()(audioFilePath)
         .audioFilters([
           "pan=stereo|c0=0.5*c0+0.5*c1|c1=0.5*c0+0.5*c1",
           "highpass=f=200",
@@ -260,7 +254,7 @@ export class SeparationClient implements SeparationProviderPort {
 
     // 2. Drums: Transient & percussive punch with steep vocal rejection notch filters
     await new Promise<void>((res, rej) => {
-      ffmpeg(audioFilePath)
+      getFfmpeg()(audioFilePath)
         .audioFilters([
           "highpass=f=35",
           "equalizer=f=60:t=q:w=1.5:g=8",
@@ -276,7 +270,7 @@ export class SeparationClient implements SeparationProviderPort {
 
     // 3. Bass: Pure sub & low-frequency extraction (20Hz - 220Hz)
     await new Promise<void>((res, rej) => {
-      ffmpeg(audioFilePath)
+      getFfmpeg()(audioFilePath)
         .audioFilters([
           "highpass=f=20",
           "lowpass=f=220",
@@ -292,7 +286,7 @@ export class SeparationClient implements SeparationProviderPort {
     if (is6Stem && pianoPath && guitarPath) {
       // 4. Piano: Acoustic resonance band (220Hz - 4.5kHz) with harmonic clarity
       await new Promise<void>((res, rej) => {
-        ffmpeg(audioFilePath)
+        getFfmpeg()(audioFilePath)
           .audioFilters([
             "highpass=f=220",
             "lowpass=f=4500",
@@ -308,7 +302,7 @@ export class SeparationClient implements SeparationProviderPort {
 
       // 5. Guitar: Mid-range plucked harmonic strings filter (180Hz - 6.5kHz)
       await new Promise<void>((res, rej) => {
-        ffmpeg(audioFilePath)
+        getFfmpeg()(audioFilePath)
           .audioFilters([
             "highpass=f=180",
             "lowpass=f=6500",
@@ -324,7 +318,7 @@ export class SeparationClient implements SeparationProviderPort {
 
       // 6. Other: Ambient synth textures and residual harmonics
       await new Promise<void>((res, rej) => {
-        ffmpeg(audioFilePath)
+        getFfmpeg()(audioFilePath)
           .audioFilters([
             "pan=stereo|c0=c0-c1|c1=c1-c0",
             "highpass=f=350",
@@ -340,7 +334,7 @@ export class SeparationClient implements SeparationProviderPort {
 
       // 7. Instrumental: Sum of Drums + Bass + Piano + Guitar + Other
       await new Promise<void>((res, rej) => {
-        ffmpeg()
+        getFfmpeg()()
           .input(drumsPath)
           .input(bassPath)
           .input(pianoPath)
@@ -358,7 +352,7 @@ export class SeparationClient implements SeparationProviderPort {
     } else {
       // 4-Stem Other: Side-channel harmonic accompaniment
       await new Promise<void>((res, rej) => {
-        ffmpeg(audioFilePath)
+        getFfmpeg()(audioFilePath)
           .audioFilters([
             "pan=stereo|c0=c0-c1|c1=c1-c0",
             "highpass=f=260",
@@ -374,7 +368,7 @@ export class SeparationClient implements SeparationProviderPort {
 
       // Instrumental: Drums + Bass + Other
       await new Promise<void>((res, rej) => {
-        ffmpeg()
+        getFfmpeg()()
           .input(drumsPath)
           .input(bassPath)
           .input(otherPath)
@@ -445,7 +439,7 @@ export class SeparationClient implements SeparationProviderPort {
         const denoisedPath = path.join(outputDirectory, `${key}_denoised.wav`);
         try {
           await new Promise<void>((res, rej) => {
-            ffmpeg(filePath)
+            getFfmpeg()(filePath)
               .audioFilters(["afftdn=nf=-25:nr=12", "highpass=f=25"])
               .output(denoisedPath)
               .on("end", () => res())

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Mic, Sparkles, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 
@@ -32,7 +32,7 @@ export const SyncedLyricsView: React.FC<SyncedLyricsViewProps> = ({
   const activeLineRef = useRef<HTMLDivElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
-  const fetchLyrics = async () => {
+  const fetchLyrics = useCallback(async () => {
     if (!mediaUrl) return;
     setIsLoading(true);
     setError(null);
@@ -78,11 +78,11 @@ export const SyncedLyricsView: React.FC<SyncedLyricsViewProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [mediaUrl, duration]);
 
   useEffect(() => {
     fetchLyrics();
-  }, [mediaUrl]);
+  }, [fetchLyrics]);
 
   // Find active line
   const activeIndex = lyrics.findIndex(

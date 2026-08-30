@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { Mic, MicOff, Zap, Volume2, Sparkles } from "lucide-react";
+import { Mic, MicOff, Volume2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { CHROMATIC_NOTES } from "@/domain/value-objects/ChordData";
 
@@ -11,6 +11,7 @@ export interface LiveMicPracticeProps {
 
 export const LiveMicPractice: React.FC<LiveMicPracticeProps> = ({ className = "" }) => {
   const [isListening, setIsListening] = useState<boolean>(false);
+  const [permissionError, setPermissionError] = useState<string | null>(null);
   const [detectedChord, setDetectedChord] = useState<string>("—");
   const [confidence, setConfidence] = useState<number>(0);
   const [pitchHz, setPitchHz] = useState<number>(0);
@@ -22,6 +23,7 @@ export const LiveMicPractice: React.FC<LiveMicPracticeProps> = ({ className = ""
   const animationFrameRef = useRef<number | null>(null);
 
   const startListening = async () => {
+    setPermissionError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
@@ -41,8 +43,13 @@ export const LiveMicPractice: React.FC<LiveMicPracticeProps> = ({ className = ""
 
       setIsListening(true);
       detectLoop();
-    } catch {
-      alert("Microphone permission was denied or is unavailable.");
+    } catch (err: any) {
+      console.error("[LiveMicPractice] Microphone access error:", err);
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        setPermissionError("Microphone access is blocked. Please allow microphone permissions in your browser's address bar.");
+      } else {
+        setPermissionError("Microphone hardware is unavailable or not detected. Please verify your mic connection.");
+      }
     }
   };
 
@@ -53,8 +60,8 @@ export const LiveMicPractice: React.FC<LiveMicPracticeProps> = ({ className = ""
     if (micStreamRef.current) {
       micStreamRef.current.getTracks().forEach((t) => t.stop());
     }
-    if (audioCtxRef.current) {
-      audioCtxRef.current.close();
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+      audioCtxRef.current.close().catch(() => {});
     }
     setIsListening(false);
     setDetectedChord("—");
@@ -191,6 +198,13 @@ export const LiveMicPractice: React.FC<LiveMicPracticeProps> = ({ className = ""
           )}
         </Button>
       </div>
+
+      {permissionError && (
+        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{permissionError}</span>
+        </div>
+      )}
 
       {/* Live Chord Feedback Card */}
       <div className="flex flex-col sm:flex-row items-center justify-between gap-6 p-4 rounded-xl bg-neutral-100/60 dark:bg-white/5 border border-neutral-200/60 dark:border-white/5">

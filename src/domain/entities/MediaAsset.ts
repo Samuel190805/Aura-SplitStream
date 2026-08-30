@@ -1,6 +1,7 @@
 export type MediaAssetKind =
   | "ORIGINAL"
   | "STEM_VOCALS"
+  | "STEM_INSTRUMENTS"
   | "STEM_DRUMS"
   | "STEM_BASS"
   | "STEM_OTHER"

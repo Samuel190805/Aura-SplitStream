@@ -82,7 +82,14 @@ export async function POST(req: NextRequest) {
         );
       }
     } else {
-      const json = await req.json();
+      const json = await req.json().catch(() => ({}));
+      if (!json || (!json.url && !json.inputFilePath)) {
+        return NextResponse.json(
+          { error: "Please provide a valid media URL or upload an audio file." },
+          { status: 400 }
+        );
+      }
+
       if (json.url) {
         sourceType = "url";
         const validation = validateAndNormalizeSourceUrl(json.url.trim());

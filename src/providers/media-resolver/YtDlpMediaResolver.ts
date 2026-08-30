@@ -22,7 +22,6 @@ export class YtDlpMediaResolver implements MediaSourceResolverPort {
   private initPaths() {
     // Resolve ffmpeg path for yt-dlp muxing
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const ffmpegStatic = require("ffmpeg-static");
       if (ffmpegStatic && fs.existsSync(ffmpegStatic)) {
         this.ffmpegBinPath = ffmpegStatic;

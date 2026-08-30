@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
         inputType = "text";
       }
     } else {
-      const json = await req.json();
+      const json = await req.json().catch(() => ({}));
       inputType = json.inputType || "text";
       sourceText = json.sourceText;
       translatedText = json.translatedText;
@@ -78,8 +78,11 @@ export async function POST(req: NextRequest) {
       if (json.enableDiarization !== undefined) enableDiarization = Boolean(json.enableDiarization);
     }
 
-    if (inputType === "text" && (!sourceText || !sourceText.trim()) && (!translatedText || !translatedText.trim())) {
-      return NextResponse.json({ error: "Source text or translated text is required" }, { status: 400 });
+    if (
+      (inputType === "text" && (!sourceText || !sourceText.trim()) && (!translatedText || !translatedText.trim())) ||
+      (inputType === "audio" && !inputAudioPath)
+    ) {
+      return NextResponse.json({ error: "Source text, translated text, or audio file is required" }, { status: 400 });
     }
 
     const job = new Job({

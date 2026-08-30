@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
         trackB = { type: "url", url: urlB.trim(), name: "Track B" };
       }
     } else {
-      const json = await req.json();
+      const json = await req.json().catch(() => ({}));
       trackA = json.trackA;
       trackB = json.trackB;
       selection = json.selection;

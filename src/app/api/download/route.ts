@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { url, targetFormat = "mp3", qualityOrResolution = "320k", mediaType = "audio" } = body;
 
     if (!url || typeof url !== "string" || !url.trim()) {

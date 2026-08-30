@@ -14,7 +14,7 @@ export class PrismaAssetRepository implements IAssetRepository {
       where: { jobId },
       orderBy: { createdAt: "asc" },
     });
-    return records.map((r) => this.toEntity(r));
+    return records.map((r: any) => this.toEntity(r));
   }
 
   async findByUserId(userId: string, limit = 50): Promise<MediaAsset[]> {
@@ -23,7 +23,7 @@ export class PrismaAssetRepository implements IAssetRepository {
       orderBy: { createdAt: "desc" },
       take: limit,
     });
-    return records.map((r) => this.toEntity(r));
+    return records.map((r: any) => this.toEntity(r));
   }
 
   async create(asset: MediaAsset): Promise<MediaAsset> {

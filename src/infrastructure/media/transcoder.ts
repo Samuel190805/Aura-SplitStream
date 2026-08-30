@@ -2,7 +2,6 @@ import fs from "fs";
 import path from "path";
 import { promisify } from "util";
 import { exec } from "child_process";
-import ffmpeg from "fluent-ffmpeg";
 import {
   TranscoderPort,
   TranscodeOptions,
@@ -13,36 +12,30 @@ import { MediaFormat, FORMAT_SPECIFICATIONS } from "@/domain/value-objects/Media
 
 const execAsync = promisify(exec);
 
-export class MediaTranscoder implements TranscoderPort {
-  private ffmpegPathInitialized = false;
+let ffmpegInstance: any = null;
 
-  constructor() {
-    this.initFfmpegPaths();
-  }
-
-  private initFfmpegPaths() {
-    if (this.ffmpegPathInitialized) return;
+function getFfmpeg(): any {
+  if (!ffmpegInstance) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      ffmpegInstance = require("fluent-ffmpeg");
       const ffmpegStatic = require("ffmpeg-static");
       if (ffmpegStatic && fs.existsSync(ffmpegStatic)) {
-        ffmpeg.setFfmpegPath(ffmpegStatic);
+        ffmpegInstance.setFfmpegPath(ffmpegStatic);
       }
-    } catch {
-      // Use system ffmpeg if available
-    }
-
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const ffprobeStatic = require("ffprobe-static");
       if (ffprobeStatic && ffprobeStatic.path && fs.existsSync(ffprobeStatic.path)) {
-        ffmpeg.setFfprobePath(ffprobeStatic.path);
+        ffmpegInstance.setFfprobePath(ffprobeStatic.path);
       }
     } catch {
-      // Use system ffprobe if available
+      // Fallback to system ffmpeg
     }
+  }
+  return ffmpegInstance;
+}
 
-    this.ffmpegPathInitialized = true;
+export class MediaTranscoder implements TranscoderPort {
+  constructor() {
+    getFfmpeg();
   }
 
   async transcode(options: TranscodeOptions): Promise<string> {
@@ -64,7 +57,7 @@ export class MediaTranscoder implements TranscoderPort {
     await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
 
     return new Promise((resolve, reject) => {
-      let command = ffmpeg(inputPath);
+      let command = getFfmpeg()(inputPath);
 
       const spec = FORMAT_SPECIFICATIONS[targetFormat];
       const isVideo = spec?.category === "video";
@@ -226,7 +219,7 @@ export class MediaTranscoder implements TranscoderPort {
     }
 
     return new Promise((resolve) => {
-      ffmpeg.ffprobe(filePath, async (err: Error | null, data: ffmpeg.FfprobeData) => {
+      getFfmpeg().ffprobe(filePath, async (err: Error | null, data: any) => {
         if (err) {
           console.warn(`[MediaTranscoder] ffprobe inspection warning:`, err.message);
           const ext = path.extname(filePath).replace(".", "").toLowerCase();
@@ -257,8 +250,8 @@ export class MediaTranscoder implements TranscoderPort {
         }
 
         const formatName = data.format?.format_name?.toLowerCase() || "";
-        const audioStream = data.streams?.find((s) => s.codec_type === "audio");
-        const videoStream = data.streams?.find((s) => s.codec_type === "video");
+        const audioStream = data.streams?.find((s: any) => s.codec_type === "audio");
+        const videoStream = data.streams?.find((s: any) => s.codec_type === "video");
 
         const actualCodec = (videoStream?.codec_name || audioStream?.codec_name || "").toLowerCase();
         const duration = data.format?.duration ? parseFloat(String(data.format.duration)) : undefined;
@@ -334,7 +327,7 @@ export class MediaTranscoder implements TranscoderPort {
     await fs.promises.mkdir(path.dirname(outputAudioPath), { recursive: true });
 
     return new Promise((resolve, reject) => {
-      ffmpeg(videoPath)
+      getFfmpeg()(videoPath)
         .noVideo()
         .format("wav")
         .audioCodec("pcm_s16le")
@@ -351,7 +344,7 @@ export class MediaTranscoder implements TranscoderPort {
     await fs.promises.mkdir(path.dirname(outputPath), { recursive: true });
 
     return new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
+      getFfmpeg()(inputPath)
         .audioFilters([
           "afftdn=nf=-25:nr=12",
           "highpass=f=30",
@@ -359,7 +352,7 @@ export class MediaTranscoder implements TranscoderPort {
         ])
         .output(outputPath)
         .on("end", () => resolve(outputPath))
-        .on("error", (err: Error) => {
+        .on("error", () => {
           // If afftdn fails, fall back to copy
           fs.copyFileSync(inputPath, outputPath);
           resolve(outputPath);
@@ -384,7 +377,7 @@ export class MediaTranscoder implements TranscoderPort {
     }
 
     return new Promise((resolve, reject) => {
-      let command = ffmpeg();
+      let command = getFfmpeg()();
       inputPaths.forEach((p) => {
         command = command.input(p);
       });

@@ -98,7 +98,7 @@ export const GraphicEqualizer: React.FC<GraphicEqualizerProps> = ({
 
       // Gain / Loudness node
       const gainNode = ctx.createGain();
-      gainNode.gain.value = loudnessEnhance ? 1.35 : 1.0;
+      gainNode.gain.value = 1.0;
       gainNodeRef.current = gainNode;
 
       // Chain: Source -> Filter 0 -> Filter 1 ... -> Filter N -> Gain -> Destination
@@ -112,11 +112,19 @@ export const GraphicEqualizer: React.FC<GraphicEqualizerProps> = ({
     } catch (err) {
       console.warn("[GraphicEqualizer] Web Audio initialization notice:", err);
     }
+  }, [audioElement, bands]);
 
-    return () => {
-      // Clean up if needed
-    };
-  }, [audioElement]);
+  // Sync band gains and loudness enhance
+  useEffect(() => {
+    bands.forEach((band, idx) => {
+      if (filterNodesRef.current[idx]) {
+        filterNodesRef.current[idx].gain.value = band.gain;
+      }
+    });
+    if (gainNodeRef.current) {
+      gainNodeRef.current.gain.value = loudnessEnhance ? 1.35 : 1.0;
+    }
+  }, [bands, loudnessEnhance]);
 
   // Update filter gains when bands change
   const handleBandChange = (index: number, gain: number) => {

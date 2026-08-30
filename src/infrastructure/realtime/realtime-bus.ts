@@ -48,7 +48,6 @@ class RealtimeBus implements RealtimePublisherPort {
 
 // Global singleton instance for Next.js runtime
 declare global {
-  // eslint-disable-next-line no-var
   var realtimeBus: RealtimeBus | undefined;
 }
 

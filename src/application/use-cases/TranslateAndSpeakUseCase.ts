@@ -69,12 +69,15 @@ export class TranslateAndSpeakUseCase {
         recognizedText = asrResult.text;
         detectedOrSourceLang = asrResult.detectedLanguage || sourceLanguage || "en";
         recognizedSegments = asrResult.segments || [];
+
+        console.log(`[TranslateAndSpeakUseCase] Job ${jobId} ASR Result: duration=${asrResult.durationSeconds}s, words=${recognizedText.split(/\s+/).length}, text="${recognizedText}"`);
       } else {
         this.publishProgress(jobId, "TRANSCRIBING", 20, "Validating input text...");
+        console.log(`[TranslateAndSpeakUseCase] Job ${jobId} Input Text: words=${(sourceText || "").split(/\s+/).length}, chars=${(sourceText || "").length}`);
       }
 
       if (!recognizedText.trim() && !translatedText?.trim()) {
-        throw new Error("No speech or text provided to translate and speak");
+        throw new Error("No speech or text could be retrieved or provided for translation.");
       }
 
       // Check if multi-speaker diarization is active

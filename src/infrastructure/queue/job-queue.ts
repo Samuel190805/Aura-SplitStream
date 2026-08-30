@@ -29,7 +29,6 @@ class InProcessJobQueue implements QueuePort {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var jobQueue: InProcessJobQueue | undefined;
 }
 

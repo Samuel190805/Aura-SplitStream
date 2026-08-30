@@ -91,7 +91,6 @@ class Container {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var diContainer: Container | undefined;
 }
 

@@ -20,7 +20,7 @@ export class PrismaJobRepository implements IJobRepository {
     }
 
     const assets = (raw.mediaAssets || []).map(
-      (a) =>
+      (a: any) =>
         new MediaAsset({
           id: a.id,
           jobId: a.jobId,
@@ -64,7 +64,7 @@ export class PrismaJobRepository implements IJobRepository {
       include: { mediaAssets: true },
     });
 
-    return records.map((raw) => {
+    return records.map((raw: any) => {
       let inputParams = {};
       try {
         inputParams = JSON.parse(raw.inputParams || "{}");

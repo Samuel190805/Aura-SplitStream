@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
       inputAudioPath = path.join(workDir, file.name || "input.wav");
       await fs.writeFile(inputAudioPath, buffer);
     } else {
-      const json = await req.json();
+      const json = await req.json().catch(() => ({}));
       url = json.url;
 
       if (!url || typeof url !== "string" || !url.trim()) {
